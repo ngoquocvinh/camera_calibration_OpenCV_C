@@ -1,3 +1,4 @@
+
 /*
   This program captures video from a camera, detects a chessboard pattern, calibrates the camera,
   undistorts an image, and then processes a video stream to find and measure distances between objects.
@@ -25,11 +26,7 @@ double computeDistanceRealUnits(const Point2f &p1, const Point2f &p2, double sca
 
 // Function to process the video stream and draw boundaries around detected objects
 void process_and_draw_boundaries(Mat &frame, Mat &threshold_output, vector<Point2f> &centroids,
-                                 const Mat &cameraMatrix, const vector<double> &distCoeffs);
-
-//  This main function captures video from a camera, performs chessboard pattern calibration,
-//  calibrates the camera, undistorts an image, and then processes a video stream to find and measure
-//  distances between objects.
+                                 const Mat &cameraMatrix, const vector<double> &distCoeffs, const Size &patternSize, const float squareSize, const vector<Point2f> &imagePoints);
 
 int main()
 {
@@ -37,7 +34,7 @@ int main()
     // Images and parameters for chessboard pattern calibration
     Mat image, otsu;
     Size patternSize(9, 6);
-    int samples = 12;
+    int samples = 2;
     int collected_samples = 0;
 
     // 3D object points for chessboard pattern calibration
@@ -57,7 +54,7 @@ int main()
     vector<vector<Point3f>> objectPointsArray;
     vector<vector<Point2f>> imagePointsArray;
 
-    const string videoStreamAddress = "http://192.168.1.3:4747/video";
+    const string videoStreamAddress = "http://192.168.1.4:4747/video";
     VideoCapture vcap;
     // Open video stream
     if (!vcap.open(videoStreamAddress))
@@ -173,7 +170,7 @@ int main()
             break;
         }
 
-        process_and_draw_boundaries(image, otsu, centroids, cameraMatrix, distCoeffs);
+        process_and_draw_boundaries(image, otsu, centroids, cameraMatrix, distCoeffs, patternSize, squareSize, imagePointsArray[0]);
 
         if (waitKey(1) >= 0)
         {
@@ -190,7 +187,7 @@ int main()
 
 // Function to process the video stream and draw boundaries around detected objects
 void process_and_draw_boundaries(Mat &frame, Mat &threshold_output, vector<Point2f> &centroids,
-                                 const Mat &cameraMatrix, const vector<double> &distCoeffs)
+                                 const Mat &cameraMatrix, const vector<double> &distCoeffs, const Size &patternSize, const float squareSize, const vector<Point2f> &detectedPoints)
 {
     // Convert the frame to HSV color space
     Mat hsv;
@@ -237,21 +234,12 @@ void process_and_draw_boundaries(Mat &frame, Mat &threshold_output, vector<Point
         centroids.push_back(centroid);
     }
 
-    drawContours(frame, contours, -1, Scalar(0, 255, 0), 2);
-
     // If there are at least two centroids, compute and display distance information
     if (centroids.size() >= 2)
     {
-        vector<Point2f> imagePoints;
-        imagePoints.push_back(centroids[0]);
-        imagePoints.push_back(centroids[1]);
-
-        vector<Point2f> undistortedPoints;
-        undistortPoints(imagePoints, undistortedPoints, cameraMatrix, distCoeffs);
-
         double distance_px = norm(centroids[0] - centroids[1]);
 
-        double distance_mm = distance_px * (undistortedPoints[1].x - undistortedPoints[0].x);
+        double distance_mm = computeDistanceRealUnits(centroids[0], centroids[1], computeScaleFactor(patternSize, squareSize, detectedPoints));
 
         // Display distance information on the frame
         ostringstream textMm;
