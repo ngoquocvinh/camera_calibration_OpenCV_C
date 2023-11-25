@@ -1,17 +1,6 @@
 /*
   This program captures video from a camera, detects a chessboard pattern, calibrates the camera,
   undistorts an image, and then processes a video stream to find and measure distances between objects.
-
-  How to use
-  1. prepare chessboard with 10x7 squares. each square is 22x22mm
-  2. install Droidcam on iphone and run it to get the ip like: http://192.168.1.6:4747
-  3. the iphone camera and computer must be a same network
-  4. fixed camera positon and use chessboard for calibrication
-  5. put the chessboard in the camera view and press spacebar key to capture a sample.
-  6. continue do it 12 times to gather 12 sample for the internal and external calibrication matrix calculation
-  7. press the spacebar for calculate two farthest distance, compare with your real manually measure in milimeter
-  8. press the spacebar and put two blue object to detect distance between them. Rotate one of them for visualling
-  9. the distance may not correct, please check your calibration methods
 */
 
 #include <opencv2/opencv.hpp>
@@ -38,11 +27,10 @@ double computeDistanceRealUnits(const Point2f &p1, const Point2f &p2, double sca
 void process_and_draw_boundaries(Mat &frame, Mat &threshold_output, vector<Point2f> &centroids,
                                  const Mat &cameraMatrix, const vector<double> &distCoeffs);
 
-/*
-  This main function captures video from a camera, performs chessboard pattern calibration,
-  calibrates the camera, undistorts an image, and then processes a video stream to find and measure
-  distances between objects.
-*/
+//  This main function captures video from a camera, performs chessboard pattern calibration,
+//  calibrates the camera, undistorts an image, and then processes a video stream to find and measure
+//  distances between objects.
+
 int main()
 {
 
@@ -69,7 +57,7 @@ int main()
     vector<vector<Point3f>> objectPointsArray;
     vector<vector<Point2f>> imagePointsArray;
 
-    const string videoStreamAddress = "http://192.168.1.6:4747/video";
+    const string videoStreamAddress = "http://192.168.1.3:4747/video";
     VideoCapture vcap;
     // Open video stream
     if (!vcap.open(videoStreamAddress))
@@ -130,40 +118,48 @@ int main()
     Mat undistortedImage;
     undistort(image, undistortedImage, cameraMatrix, distCoeffs);
 
-    // Compute and display distance in pixels and real-world units
-    double distancePixels = computeDistancePixels(imagePointsArray[0]);
-    double distanceMM = distancePixels * squareSize / norm(imagePointsArray[0][0] - imagePointsArray[0][1]);
+    // Find and mark two random points in the undistorted image
+    Point2f randomPoint1, randomPoint2;
 
-    putText(undistortedImage, "Distance: " + to_string(distancePixels) + " pixels", Point(10, 30),
-            FONT_HERSHEY_SIMPLEX, 1, Scalar(0, 0, 255), 2);
-    putText(undistortedImage, "Distance: " + to_string(distanceMM) + " mm", Point(10, 60),
-            FONT_HERSHEY_SIMPLEX, 1, Scalar(0, 0, 255), 2);
-
-    // Find and mark the two farthest points in the undistorted image
-    Point2f farthestPoint1, farthestPoint2;
-    double maxDistance = -1;
-
-    for (int i = 0; i < imagePointsArray[0].size(); i++)
+    // Ensure there are at least two points in the list
+    if (imagePointsArray[0].size() >= 2)
     {
-        for (int j = i + 1; j < imagePointsArray[0].size(); j++)
+        // Generate two random indices
+        int index1 = rand() % imagePointsArray[0].size();
+        int index2;
+
+        do
         {
-            double distance = norm(imagePointsArray[0][i] - imagePointsArray[0][j]);
-            if (distance > maxDistance)
-            {
-                maxDistance = distance;
-                farthestPoint1 = imagePointsArray[0][i];
-                farthestPoint2 = imagePointsArray[0][j];
-            }
-        }
+            index2 = rand() % imagePointsArray[0].size();
+        } while (index2 == index1);
+
+        // Retrieve the corresponding points
+        randomPoint1 = imagePointsArray[0][index1];
+        randomPoint2 = imagePointsArray[0][index2];
+
+        // Mark the randomly selected points
+        circle(undistortedImage, randomPoint1, 5, Scalar(0, 255, 0), -1);
+        circle(undistortedImage, randomPoint2, 5, Scalar(0, 255, 0), -1);
+
+        // Compute and display distance in pixels and real-world units
+        double distancePixels = norm(randomPoint1 - randomPoint2);
+        double distanceMM = computeDistanceRealUnits(randomPoint1, randomPoint2, computeScaleFactor(patternSize, squareSize, imagePointsArray[0]));
+
+        putText(undistortedImage, "Distance: " + to_string(distancePixels) + " pixels", Point(10, 30),
+                FONT_HERSHEY_SIMPLEX, 1, Scalar(0, 0, 255), 2);
+        putText(undistortedImage, "Distance: " + to_string(distanceMM) + " mm", Point(10, 60),
+                FONT_HERSHEY_SIMPLEX, 1, Scalar(0, 0, 255), 2);
+
+        // Display the original and annotated images
+        imshow("Original Image", image);
+        imshow("Annotated Image", undistortedImage);
+        waitKey(0);
     }
-
-    circle(undistortedImage, farthestPoint1, 5, Scalar(0, 255, 0), -1);
-    circle(undistortedImage, farthestPoint2, 5, Scalar(0, 255, 0), -1);
-
-    // Display the original and annotated images
-    imshow("Original Image", image);
-    imshow("Annotated Image", undistortedImage);
-    waitKey(0);
+    else
+    {
+        cout << "Not enough points in the list to choose randomly." << endl;
+        return -1;
+    }
 
     // Process video stream for object detection and distance measurement
     vector<Point2f> centroids;
